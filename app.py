@@ -29,6 +29,7 @@
 
 #         st.success(f"Predicted Sentiment: {sentiment}")
 
+
 import streamlit as st
 import pickle
 import numpy as np
@@ -37,8 +38,10 @@ from collections import Counter
 import PyPDF2
 import matplotlib.pyplot as plt
 
+st.set_page_config(layout="wide")
+
 # ================================
-# Load model + vectorizer
+# Load model
 # ================================
 with open('tfidf_vectorizer.pkl', 'rb') as f:
     vectorizer = pickle.load(f)
@@ -47,23 +50,20 @@ with open('logreg_model.pkl', 'rb') as f:
     model = pickle.load(f)
 
 # ================================
-# PDF Text Extraction
+# PDF extraction
 # ================================
 def extract_text_from_pdf(pdf_file):
     reader = PyPDF2.PdfReader(pdf_file)
     text = ""
-
     for page in reader.pages:
         text += page.extract_text() + "\n"
-
     return text
 
 
 # ================================
 # UI
 # ================================
-st.title("PDF Sentiment Analyzer (Now with Graphs™)")
-st.write("Upload your PDF. I’ll turn opinions into statistics.")
+st.title("📊 PDF Sentiment Dashboard")
 
 uploaded_file = st.file_uploader("Upload PDF", type=["pdf"])
 
@@ -74,73 +74,73 @@ if uploaded_file is not None:
         reactions = [line.strip() for line in raw_text.split("\n") if line.strip() != ""]
 
         if len(reactions) == 0:
-            st.error("No text found. That PDF was emotionally empty.")
+            st.error("No text found.")
         else:
-            # Vectorize
             vectors = vectorizer.transform(reactions)
-
-            # Predictions
             predictions = model.predict(vectors)
             probabilities = model.predict_proba(vectors)
 
             sentiment_map = {0: 'Negative', 1: 'Neutral', 2: 'Positive'}
             sentiments = [sentiment_map.get(p, 'Unknown') for p in predictions]
-
-            # Confidence = max probability
             confidence = np.max(probabilities, axis=1)
 
-            # ================================
-            # DataFrame
-            # ================================
             df = pd.DataFrame({
                 "Reaction": reactions,
                 "Sentiment": sentiments,
                 "Confidence": confidence
             })
 
-            st.subheader("📄 Predictions with Confidence")
-            st.dataframe(df)
-
-            # ================================
-            # Metrics
-            # ================================
             counts = Counter(sentiments)
             total = len(sentiments)
 
-            metrics = {
-                "Total": total,
-                "Positive %": round((counts.get("Positive", 0) / total) * 100, 2),
-                "Neutral %": round((counts.get("Neutral", 0) / total) * 100, 2),
-                "Negative %": round((counts.get("Negative", 0) / total) * 100, 2),
-                "Avg Confidence": round(float(np.mean(confidence)), 3)
-            }
-
-            st.subheader("📊 Summary")
-            st.json(metrics)
+            pos = counts.get("Positive", 0)
+            neu = counts.get("Neutral", 0)
+            neg = counts.get("Negative", 0)
 
             # ================================
-            # BAR CHART
+            # TOP: SUMMARY + VERDICT
             # ================================
-            st.subheader("📊 Bar Chart")
+            col1, col2, col3, col4 = st.columns(4)
 
-            labels = list(counts.keys())
-            values = list(counts.values())
+            col1.metric("Total", total)
+            col2.metric("Positive", f"{pos} ({round(pos/total*100,2)}%)")
+            col3.metric("Neutral", f"{neu} ({round(neu/total*100,2)}%)")
+            col4.metric("Negative", f"{neg} ({round(neg/total*100,2)}%)")
 
+            # Overall sentiment
+            if pos > neg and pos > neu:
+                overall = "Positive 😊"
+            elif neg > pos and neg > neu:
+                overall = "Negative 😡"
+            else:
+                overall = "Neutral 😐"
+
+            st.markdown(f"### 🧠 Overall Sentiment: **{overall}**")
+
+            # ================================
+            # MIDDLE: CHARTS SIDE BY SIDE
+            # ================================
+            c1, c2 = st.columns(2)
+
+            labels = ["Positive", "Neutral", "Negative"]
+            values = [pos, neu, neg]
+
+            # Bar Chart
             fig1, ax1 = plt.subplots()
             ax1.bar(labels, values)
-            ax1.set_title("Sentiment Distribution")
-            ax1.set_xlabel("Sentiment")
-            ax1.set_ylabel("Count")
+            ax1.set_title("Distribution")
 
-            st.pyplot(fig1)
+            c1.pyplot(fig1)
 
-            # ================================
-            # PIE CHART
-            # ================================
-            st.subheader("🥧 Pie Chart")
-
+            # Pie Chart
             fig2, ax2 = plt.subplots()
             ax2.pie(values, labels=labels, autopct='%1.1f%%')
-            ax2.set_title("Sentiment Share")
+            ax2.set_title("Share")
 
-            st.pyplot(fig2)
+            c2.pyplot(fig2)
+
+            # ================================
+            # BOTTOM: TABLE
+            # ================================
+            st.markdown("### 📄 Detailed Predictions")
+            st.dataframe(df, use_container_width=True)
