@@ -63,7 +63,7 @@ def extract_text_from_pdf(pdf_file):
 # ================================
 # UI
 # ================================
-st.title("📊 PDF Sentiment Dashboard")
+st.title(" Sentiment Analyzer Dashboard")
 
 uploaded_file = st.file_uploader("Upload PDF", type=["pdf"])
 
